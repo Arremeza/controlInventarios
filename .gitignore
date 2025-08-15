@@ -1,0 +1,18 @@
+# Node modules
+**/node_modules/
+
+# Builds
+client/dist/
+server/dist/
+
+# Env
+**/.env
+
+# Logs
+**/*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite cache
+client/.vite/
