@@ -1,12 +1,19 @@
-# Node modules
+# Node
 **/node_modules/
+**/.pnp
+**/.pnp.js
 
-# Builds
+# Builds / bundles
 client/dist/
 server/dist/
+**/build/
 
-# Env
+# Env (mantén ejemplos)
 **/.env
+**/.env.*
+server/.env
+!**/.env.example
+!**/.env.sample
 
 # Logs
 **/*.log
@@ -14,5 +21,12 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Vite cache
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Vite / Cache
 client/.vite/
+**/.cache/
