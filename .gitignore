@@ -11,7 +11,7 @@ server/dist/
 # Env (mantén ejemplos)
 **/.env
 **/.env.*
-server/.env
+server/.env.
 !**/.env.example
 !**/.env.sample
 
