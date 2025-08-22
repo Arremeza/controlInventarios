@@ -312,6 +312,7 @@ label {
   flex-direction: column;
   gap: 8px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
 }
 
 .product-card:hover {
@@ -637,3 +638,28 @@ label {
 .qty { font-weight: 600; }
 .qty-in { color: #22c55e; }
 .qty-out { color: #ef4444; }
+
+.modal-actions { display: flex; gap: 8px; align-items: center; }
+
+.edit-form { display: grid; gap: 10px; }
+
+.card-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: #9ca3af; /* gris */
+  font-size: 14px;
+  cursor: pointer;
+}
+.card-edit-btn:hover { color: var(--text); border-color: var(--accent); }
+.card-edit-btn .icon { width: 16px; height: 16px; display: block; }
+/* Si tu icono es PNG y quieres forzar tono gris: */
+/* .card-edit-btn .icon { filter: grayscale(1) brightness(0.8); } */
