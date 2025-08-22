@@ -13,6 +13,8 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [productDeliveries, setProductDeliveries] = useState([])
+  const [editingProductId, setEditingProductId] = useState(null)
+  const [editingProductForm, setEditingProductForm] = useState({ name: '', description: '', unit: 'piezas', quantity: 0, recommendedQuantity: 0 })
   const [editingDeliveryId, setEditingDeliveryId] = useState(null)
   const [editingDeliveryQty, setEditingDeliveryQty] = useState('')
   const [showDeliverModal, setShowDeliverModal] = useState(false)
@@ -20,7 +22,7 @@ export default function ProductsPage() {
   const [users, setUsers] = useState([])
   const [deliveryFilters, setDeliveryFilters] = useState({ userId: '', from: '', to: '' })
   const productsPerPage = 18
-
+ 
   const load = useCallback(async () => {
     const { data } = await api.get('/products')
     setProducts(data.products)
@@ -175,7 +177,12 @@ export default function ProductsPage() {
         <div className="products-grid">
           {currentProducts.map((p) => (
             <div key={p.id || p._id} className="product-card" onClick={() => openProductCard(p)} role="button" tabIndex={0}>
-              <strong>{p.name}</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong>{p.name}</strong>
+                {p.isLowStock && (
+                  <span className="low-stock-indicator" title="Producto escaso"></span>
+                )}
+              </div>
               <div className="muted">{p.description}</div>
               <div className="muted">Unidad: {p.unit}</div>
             </div>
@@ -205,6 +212,9 @@ export default function ProductsPage() {
                 <div className="product-details">
                   <div className="muted">Descripción: {selectedProduct.description}</div>
                   <div className="muted">Unidad: {selectedProduct.unit}</div>
+                  {selectedProduct.isLowStock && (
+                    <div className="muted">Estado: Producto escaso</div>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
@@ -263,19 +273,87 @@ export default function ProductsPage() {
       <div className="products-grid">
         {currentProducts.map((p) => (
           <div key={p._id || p.id} className="product-card" onClick={() => openProductCard(p)} role="button" tabIndex={0}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <strong>{p.name}</strong>
-              {(typeof p.recommendedQuantity === 'number' && typeof p.quantity === 'number' && p.recommendedQuantity > 0 && p.quantity < p.recommendedQuantity) && (
-                <span className="low-stock-indicator" title="Producto escaso"></span>
-              )}
-            </div>
-            <div className="muted">{p.description}</div>
-            <div className="muted">Unidad: {p.unit}</div>
-            <div className="product-actions">
-              <div className="badge">{p.quantity} {p.unit}</div>
-              <button className="ghost" onClick={(ev) => { ev.stopPropagation(); openProductCard(p) }}>Ver</button>
-              <button className="ghost" onClick={(ev) => { ev.stopPropagation(); handleDelete(p._id || p.id) }}>Eliminar</button>
-            </div>
+            {user?.role === 'admin' && editingProductId !== (p._id || p.id) && (
+              <button
+                className="card-edit-btn"
+                onClick={(ev) => {
+                  ev.stopPropagation()
+                  setEditingProductId(p._id || p.id)
+                  setEditingProductForm({
+                    name: p.name || '',
+                    description: p.description || '',
+                    unit: p.unit || 'piezas',
+                    quantity: Number(p.quantity) || 0,
+                    recommendedQuantity: Number(p.recommendedQuantity) || 0
+                  })
+                }}
+                title="Editar producto"
+              >✎</button>
+            )}
+
+            {editingProductId === (p._id || p.id) ? (
+              <div className="edit-form" onClick={(e) => e.stopPropagation()}>
+                <input placeholder="Nombre" value={editingProductForm.name} onChange={(e) => setEditingProductForm({ ...editingProductForm, name: e.target.value })} />
+                <input placeholder="Descripción" value={editingProductForm.description} onChange={(e) => setEditingProductForm({ ...editingProductForm, description: e.target.value })} />
+                <div className="modal-actions">
+                  <input style={{ maxWidth: 120 }} placeholder="Cantidad" type="number" min="0" value={editingProductForm.quantity} onChange={(e) => setEditingProductForm({ ...editingProductForm, quantity: e.target.value })} />
+                  <input style={{ maxWidth: 160 }} placeholder="Cant. recomendada" type="number" min="0" value={editingProductForm.recommendedQuantity} onChange={(e) => setEditingProductForm({ ...editingProductForm, recommendedQuantity: e.target.value })} />
+                  <select style={{ maxWidth: 140 }} value={editingProductForm.unit} onChange={(e) => setEditingProductForm({ ...editingProductForm, unit: e.target.value })}>
+                    <option value="piezas">Piezas</option>
+                    <option value="metros">Metros</option>
+                    <option value="kilos">Kilos</option>
+                    <option value="litros">Litros</option>
+                    <option value="cajas">Cajas</option>
+                    <option value="paquetes">Paquetes</option>
+                    <option value="unidades">Unidades</option>
+                  </select>
+                </div>
+                <div className="modal-actions">
+                  <button
+                    className="primary"
+                    onClick={async () => {
+                      try {
+                        const payload = {
+                          name: editingProductForm.name,
+                          description: editingProductForm.description,
+                          unit: editingProductForm.unit,
+                          quantity: Number(editingProductForm.quantity) || 0,
+                          recommendedQuantity: Number(editingProductForm.recommendedQuantity) || 0
+                        }
+                        await api.put(`/products/${p._id || p.id}`, payload)
+                        setEditingProductId(null)
+                        await load()
+                      } catch (err) {
+                        alert(err?.response?.data?.message || 'Error al actualizar producto')
+                      }
+                    }}
+                  >Guardar</button>
+                  <button
+                    className="ghost"
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      setEditingProductId(null)
+                    }}
+                  >Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <strong>{p.name}</strong>
+                  {(typeof p.recommendedQuantity === 'number' && typeof p.quantity === 'number' && p.recommendedQuantity > 0 && p.quantity < p.recommendedQuantity) && (
+                    <span className="low-stock-indicator" title="Producto escaso"></span>
+                  )}
+                </div>
+                <div className="muted">{p.description}</div>
+                <div className="muted">Unidad: {p.unit}</div>
+                <div className="product-actions">
+                  <div className="badge">{p.quantity} {p.unit}</div>
+                  <button className="ghost" onClick={(ev) => { ev.stopPropagation(); openProductCard(p) }}>Ver</button>
+                  <button className="ghost" onClick={(ev) => { ev.stopPropagation(); handleDelete(p._id || p.id) }}>Eliminar</button>
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -306,6 +384,9 @@ export default function ProductsPage() {
                 <div className="muted">Descripción: {selectedProduct.description}</div>
                 <div className="muted">Unidad: {selectedProduct.unit}</div>
                 <div className="muted">Cantidad actual: {selectedProduct.quantity} {selectedProduct.unit}</div>
+                {(typeof selectedProduct?.recommendedQuantity === 'number' && selectedProduct.recommendedQuantity > 0 && typeof selectedProduct?.quantity === 'number' && selectedProduct.quantity < selectedProduct.recommendedQuantity) && (
+                  <div className="muted">Estado: Producto escaso</div>
+                )}
               </div>
 
               {/* Filtros historial */}
