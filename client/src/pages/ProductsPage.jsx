@@ -22,6 +22,7 @@ export default function ProductsPage() {
   const [users, setUsers] = useState([])
   const [deliveryFilters, setDeliveryFilters] = useState({ userId: '', from: '', to: '' })
   const productsPerPage = 18
+  
  
   const load = useCallback(async () => {
     const { data } = await api.get('/products')
@@ -31,6 +32,8 @@ export default function ProductsPage() {
   useEffect(() => {
     load().catch(() => {})
   }, [load])
+
+  
 
   // Cargar usuarios (solo admin)
   useEffect(() => {
@@ -164,6 +167,7 @@ export default function ProductsPage() {
     // Vista de solo lectura para usuarios no admin
     return (
       <div>
+        
         <h2>Productos</h2>
         <div className="search-container">
           <input
@@ -185,6 +189,21 @@ export default function ProductsPage() {
               </div>
               <div className="muted">{p.description}</div>
               <div className="muted">Unidad: {p.unit}</div>
+              <div className="product-actions">
+                <button className="ghost" onClick={(ev) => { ev.stopPropagation(); openProductCard(p) }}>Ver</button>
+                <button className="ghost" onClick={async (ev) => {
+                  ev.stopPropagation()
+                  const qtyStr = prompt('Cantidad a solicitar:')
+                  const qty = Number(qtyStr)
+                  if (!qty || qty <= 0) return
+                  try {
+                    await api.post(`/products/${p._id || p.id}/request`, { quantity: qty })
+                    alert('Solicitud enviada')
+                  } catch (err) {
+                    alert(err?.response?.data?.message || 'Error al solicitar producto')
+                  }
+                }}>Solicitar</button>
+              </div>
             </div>
           ))}
         </div>
@@ -229,6 +248,8 @@ export default function ProductsPage() {
   // Vista Admin
   return (
     <div>
+      
+
       <h2 className='title'>Administrar Productos</h2>
 
       <div className="form-toggle-container">

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate, Link, NavLink } from 'react-router-dom'
 import './App.css'
 import LoginPage from './pages/LoginPage.jsx'
@@ -15,16 +15,34 @@ function PrivateRoute({ children, roles }) {
 }
 
 function Layout({ children, showNav = true }) {
-  const { user, logout } = useAuth()
+  const { user, logout, api } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
   const closeMobile = () => setMobileOpen(false)
   const isAdmin = user?.role === 'admin'
+  const [notifications, setNotifications] = useState([])
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const { data } = await api.get('/notifications')
+      setNotifications(Array.isArray(data.notifications) ? data.notifications : [])
+    } catch {
+      // ignore
+    }
+  }, [api])
+
+  useEffect(() => {
+    if (user) fetchNotifications().catch(() => {})
+  }, [user, fetchNotifications])
   
   return (
     <div className="container">
       {showNav && user && (
         <>
+          <button className="notifications-toggle" onClick={toggleTheme} aria-label="Cambiar tema">
+            {theme === 'dark' ? '🌙' : '☀️'}
+          </button>
           <nav className={`nav ${isAdmin ? 'nav-with-mobile' : ''}`}>
             {isAdmin && (
               <button className="mobile-toggle" onClick={() => setMobileOpen((v) => !v)} aria-label="Abrir menú">☰</button>
@@ -36,12 +54,37 @@ function Layout({ children, showNav = true }) {
               </>
             )}
             <div className="nav-right">
-              <button className="ghost" onClick={toggleTheme} aria-label="Cambiar tema">
-                {theme === 'dark' ? '🌙 Oscuro' : '☀️ Claro'}
+              <button className="ghost" onClick={() => { setShowNotifications((s) => !s); fetchNotifications().catch(() => {}) }}>
+                Notificaciones {notifications.filter(n => !n.read).length > 0 ? `(${notifications.filter(n => !n.read).length})` : ''}
               </button>
               <button onClick={logout}>Cerrar sesión</button>
             </div>
           </nav>
+          {showNotifications && (
+            <>
+              <div className="notifications-backdrop" onClick={() => setShowNotifications(false)} />
+              <div className="notifications-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="notifications-header">
+                  <strong>Notificaciones</strong>
+                  <div className="spacer" />
+                  <button className="ghost" onClick={async () => { await api.post('/notifications/read-all'); await fetchNotifications(); }}>Marcar todas</button>
+                </div>
+                <div className="notifications-list">
+                  {notifications.length === 0 ? (
+                    <div className="muted">Sin notificaciones</div>
+                  ) : notifications.map((n) => (
+                    <div key={n._id || n.id} className={`notification-item ${n.read ? 'read' : ''}`}>
+                      <div className="notification-title">{n.title}</div>
+                      <div className="notification-message muted">{n.message}</div>
+                      {!n.read && (
+                        <button className="ghost" onClick={async () => { await api.post(`/notifications/read/${n._id || n.id}`); await fetchNotifications(); }}>Marcar leída</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           {mobileOpen && isAdmin && (
             <>
               <div className="backdrop" onClick={closeMobile} />
