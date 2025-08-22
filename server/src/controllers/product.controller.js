@@ -35,16 +35,21 @@ export async function listProducts(req, res) {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
     if (req.user?.role !== 'admin') {
-      const masked = products.map((p) => ({
-        id: p._id,
-        name: p.name,
-        description: p.description,
-        unit: p.unit,
-        // Ocultar cantidad a usuarios no admin
-        quantity: undefined,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt
-      }));
+      const masked = products.map((p) => {
+        const isLowStock = typeof p.recommendedQuantity === 'number' && p.recommendedQuantity > 0 && (typeof p.quantity === 'number') && p.quantity < p.recommendedQuantity;
+        return {
+          id: p._id,
+          name: p.name,
+          description: p.description,
+          unit: p.unit,
+          // Ocultar cantidad a usuarios no admin
+          quantity: undefined,
+          // Exponer solo el estado (no números)
+          isLowStock,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt
+        }
+      });
       return res.json({ products: masked });
     }
     res.json({ products });
@@ -58,6 +63,7 @@ export async function getProduct(req, res) {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
     if (req.user?.role !== 'admin') {
+      const isLowStock = typeof product.recommendedQuantity === 'number' && product.recommendedQuantity > 0 && (typeof product.quantity === 'number') && product.quantity < product.recommendedQuantity;
       return res.json({
         product: {
           id: product._id,
@@ -65,6 +71,7 @@ export async function getProduct(req, res) {
           description: product.description,
           unit: product.unit,
           quantity: undefined,
+          isLowStock,
           createdAt: product.createdAt,
           updatedAt: product.updatedAt
         }
