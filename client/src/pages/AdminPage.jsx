@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 
 export default function AdminPage() {
@@ -10,14 +10,14 @@ export default function AdminPage() {
   const [userErrorDetails, setUserErrorDetails] = useState([])
   const [error, setError] = useState('')
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const usersRes = await api.get('/users')
     setUsers(usersRes.data.users)
-  }
+  }, [api])
 
   useEffect(() => {
     load().catch(() => {})
-  }, [])
+  }, [load])
 
   return (
     <div>

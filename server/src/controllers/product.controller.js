@@ -1,6 +1,7 @@
 import { Product } from '../models/Product.js';
 import { Delivery } from '../models/Delivery.js';
 import { User } from '../models/User.js';
+import { Notification } from '../models/Notification.js';
 
 export async function createProduct(req, res) {
   try {
@@ -116,7 +117,30 @@ export async function updateProduct(req, res) {
         deliveredBy: req.user._id,
         deliveredAt: new Date()
       });
+      // Notificar a usuarios no admin que se surtió producto
+      try {
+        await Notification.create({
+          audience: 'all',
+          type: 'restocked',
+          title: 'Producto surtido',
+          message: `Se surtió "${product.name}" (+${quantityDelta}).`,
+          product: product._id
+        })
+      } catch {}
     }
+    // Notificar bajo stock si aplica
+    try {
+      const low = (typeof product.recommendedQuantity === 'number' && product.recommendedQuantity > 0 && (typeof product.quantity === 'number') && product.quantity < product.recommendedQuantity)
+      if (low) {
+        await Notification.create({
+          audience: 'all',
+          type: 'low_stock',
+          title: 'Existencia escasa',
+          message: `Baja existencia de "${product.name}".`,
+          product: product._id
+        })
+      }
+    } catch {}
     res.json({ product });
   } catch (error) {
     res.status(500).json({ message: 'Error al actualizar producto', error: error.message });
@@ -159,6 +183,16 @@ export async function deliverProduct(req, res) {
     if (!toUser) return res.status(404).json({ message: 'Usuario destino no encontrado' });
 
     if (product.quantity < quantity) {
+      // Notificación a administradores por solicitud/insuficiencia
+      try {
+        await Notification.create({
+          audience: 'admin',
+          type: 'insufficient_stock',
+          title: 'Solicitud sin stock suficiente',
+          message: `Intento de entregar ${quantity} de "${product.name}" sin stock suficiente.`,
+          product: product._id
+        })
+      } catch {}
       return res.status(400).json({ message: 'Cantidad insuficiente en inventario' });
     }
 
@@ -180,6 +214,19 @@ export async function deliverProduct(req, res) {
     session.endSession();
 
     const updated = await Product.findById(product._id);
+    // Notificar bajo stock si aplica tras salida
+    try {
+      const low = (typeof updated.recommendedQuantity === 'number' && updated.recommendedQuantity > 0 && (typeof updated.quantity === 'number') && updated.quantity < updated.recommendedQuantity)
+      if (low) {
+        await Notification.create({
+          audience: 'all',
+          type: 'low_stock',
+          title: 'Existencia escasa',
+          message: `Baja existencia de "${updated.name}".`,
+          product: updated._id
+        })
+      }
+    } catch {}
     res.status(201).json({ message: 'Entrega registrada', product: updated });
   } catch (error) {
     console.error('deliverProduct error:', error);
@@ -198,6 +245,38 @@ export async function listProductDeliveries(req, res) {
     res.json({ deliveries });
   } catch (error) {
     res.status(500).json({ message: 'Error al listar entregas', error: error.message });
+  }
+}
+
+// Solicitud de producto por usuario (autenticado, cualquier rol)
+export async function requestProduct(req, res) {
+  try {
+    const { id } = req.params
+    const { quantity } = req.body || {}
+    if (typeof quantity !== 'number' || quantity <= 0) {
+      return res.status(400).json({ message: 'Cantidad (>0) es requerida' })
+    }
+    const product = await Product.findById(id)
+    if (!product) return res.status(404).json({ message: 'Producto no encontrado' })
+
+    const isLow = (typeof product.recommendedQuantity === 'number' && product.recommendedQuantity > 0 && (typeof product.quantity === 'number') && product.quantity < product.recommendedQuantity)
+    const insufficient = product.quantity < quantity
+
+    // Notificar a administradores
+    await Notification.create({
+      audience: 'admin',
+      type: insufficient ? 'insufficient_stock' : 'product_request',
+      title: insufficient ? 'Solicitud sin stock suficiente' : 'Solicitud de producto',
+      message: insufficient
+        ? `${req.user?.name || req.user?.email || 'Usuario'} solicitó ${quantity} de "${product.name}" sin stock suficiente.`
+        : `${req.user?.name || req.user?.email || 'Usuario'} solicitó ${quantity} de "${product.name}"${isLow ? ' (existencia escasa)' : ''}.`,
+      product: product._id
+    })
+
+    return res.status(201).json({ message: 'Solicitud registrada' })
+  } catch (error) {
+    console.error('requestProduct error:', error)
+    return res.status(500).json({ message: 'Error al registrar solicitud' })
   }
 }
 
@@ -252,6 +331,20 @@ export async function updateProductDelivery(req, res) {
       Product.findById(product._id),
       Delivery.findById(delivery._id).populate('toUser', 'name email role').populate('deliveredBy', 'name email')
     ]);
+
+    // Notificar bajo stock si aplica
+    try {
+      const low = (typeof updatedProduct.recommendedQuantity === 'number' && updatedProduct.recommendedQuantity > 0 && (typeof updatedProduct.quantity === 'number') && updatedProduct.quantity < updatedProduct.recommendedQuantity)
+      if (low) {
+        await Notification.create({
+          audience: 'all',
+          type: 'low_stock',
+          title: 'Existencia escasa',
+          message: `Baja existencia de "${updatedProduct.name}".`,
+          product: updatedProduct._id
+        })
+      }
+    } catch {}
 
     return res.json({ message: 'Entrega actualizada', product: updatedProduct, delivery: updatedDelivery });
   } catch (error) {

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
-import { createProduct, listProducts, getProduct, updateProduct, deleteProduct, deliverProduct, listProductDeliveries, updateProductDelivery } from '../controllers/product.controller.js';
+import { createProduct, listProducts, getProduct, updateProduct, deleteProduct, deliverProduct, listProductDeliveries, updateProductDelivery, requestProduct } from '../controllers/product.controller.js';
 
 const router = Router();
 
@@ -17,6 +17,7 @@ router.put('/:id', authorize(['admin']), updateProduct);
 router.delete('/:id', authorize(['admin']), deleteProduct);
 router.post('/:id/deliver', authorize(['admin']), deliverProduct);
 router.put('/:id/deliveries/:deliveryId', authorize(['admin']), updateProductDelivery);
+router.post('/:id/request', requestProduct);
 
 export default router;
 
