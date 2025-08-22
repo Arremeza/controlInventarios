@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import editIcon from '../assets/edit_icon.png'
 
 export default function ProductsPage() {
   const { api, user } = useAuth()
-  const [form, setForm] = useState({ name: '', description: '', unit: 'piezas', quantity: 0 })
+  const [form, setForm] = useState({ name: '', description: '', unit: 'piezas', quantity: 0, recommendedQuantity: 0 })
   const [products, setProducts] = useState([])
   const [filteredProducts, setFilteredProducts] = useState([])
   const [loading, setLoading] = useState(false)
@@ -14,12 +13,12 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [productDeliveries, setProductDeliveries] = useState([])
+  const [editingDeliveryId, setEditingDeliveryId] = useState(null)
+  const [editingDeliveryQty, setEditingDeliveryQty] = useState('')
   const [showDeliverModal, setShowDeliverModal] = useState(false)
   const [deliverForm, setDeliverForm] = useState({ quantity: '', toUserId: '' })
   const [users, setUsers] = useState([])
   const [deliveryFilters, setDeliveryFilters] = useState({ userId: '', from: '', to: '' })
-  const [showEdit, setShowEdit] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', description: '', quantity: 0, unit: 'piezas' })
   const productsPerPage = 18
 
   const load = useCallback(async () => {
@@ -65,8 +64,9 @@ export default function ProductsPage() {
         description: form.description,
         unit: form.unit,
         quantity: Number(form.quantity) || 0,
+        recommendedQuantity: Number(form.recommendedQuantity) || 0,
       })
-      setForm({ name: '', description: '', unit: 'piezas', quantity: 0 })
+      setForm({ name: '', description: '', unit: 'piezas', quantity: 0, recommendedQuantity: 0 })
       setShowForm(false)
       await load()
     } catch (err) {
@@ -98,13 +98,6 @@ export default function ProductsPage() {
       const { data } = await api.get(`/products/${id}`)
       const prod = data.product || data
       setSelectedProduct(prod)
-      setShowEdit(false)
-      setEditForm({
-        name: prod.name || '',
-        description: prod.description || '',
-        quantity: typeof prod.quantity === 'number' ? prod.quantity : 0,
-        unit: prod.unit || 'piezas'
-      })
       if (user?.role === 'admin') {
         const deliveries = await api.get(`/products/${id}/deliveries`)
         setProductDeliveries(deliveries.data.deliveries || [])
@@ -116,18 +109,14 @@ export default function ProductsPage() {
     }
   }
 
-  const openProductCardForEdit = async (p) => {
-    await openProductCard(p)
-    setShowEdit(true)
-  }
-
   const closeProductCard = () => {
     setSelectedProduct(null)
     setProductDeliveries([])
     setShowDeliverModal(false)
     setDeliverForm({ quantity: '', toUserId: '' })
     setDeliveryFilters({ userId: '', from: '', to: '' })
-    setShowEdit(false)
+    setEditingDeliveryId(null)
+    setEditingDeliveryQty('')
   }
 
   const submitDelivery = async (e) => {
@@ -147,25 +136,6 @@ export default function ProductsPage() {
       await load()
     } catch (err) {
       alert(err?.response?.data?.message || 'Error al registrar entrega')
-    }
-  }
-
-  const submitEdit = async (e) => {
-    e.preventDefault()
-    if (!selectedProduct) return
-    try {
-      const payload = {
-        name: editForm.name.trim(),
-        description: (editForm.description || '').trim(),
-        unit: editForm.unit,
-        quantity: Number(editForm.quantity) || 0
-      }
-      await api.put(`/products/${selectedProduct._id || selectedProduct.id}`, payload)
-      await openProductCard(selectedProduct._id || selectedProduct.id)
-      setShowEdit(false)
-      await load()
-    } catch (err) {
-      alert(err?.response?.data?.message || 'Error al actualizar producto')
     }
   }
 
@@ -237,7 +207,9 @@ export default function ProductsPage() {
                   <div className="muted">Unidad: {selectedProduct.unit}</div>
                 </div>
               </div>
-              
+              <div className="modal-footer">
+                <button onClick={closeProductCard}>Cerrar</button>
+              </div>
             </div>
           </div>
         )}
@@ -263,6 +235,7 @@ export default function ProductsPage() {
           <input placeholder="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input placeholder="Descripción" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <input placeholder="Cantidad" type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} min="0" />
+          <input placeholder="Cantidad recomendada" type="number" value={form.recommendedQuantity} onChange={(e) => setForm({ ...form, recommendedQuantity: e.target.value })} min="0" />
           <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
             <option value="piezas">Piezas</option>
             <option value="metros">Metros</option>
@@ -290,15 +263,12 @@ export default function ProductsPage() {
       <div className="products-grid">
         {currentProducts.map((p) => (
           <div key={p._id || p.id} className="product-card" onClick={() => openProductCard(p)} role="button" tabIndex={0}>
-            <button
-              className="card-edit-btn"
-              aria-label="Editar producto"
-              onClick={(ev) => { ev.stopPropagation(); openProductCardForEdit(p) }}
-              title="Editar"
-            >
-              <img src={editIcon} alt="Editar" className="icon" width="16" height="16" />
-            </button>
-            <strong>{p.name}</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <strong>{p.name}</strong>
+              {(typeof p.recommendedQuantity === 'number' && typeof p.quantity === 'number' && p.recommendedQuantity > 0 && p.quantity < p.recommendedQuantity) && (
+                <span className="low-stock-indicator" title="Producto escaso"></span>
+              )}
+            </div>
             <div className="muted">{p.description}</div>
             <div className="muted">Unidad: {p.unit}</div>
             <div className="product-actions">
@@ -329,115 +299,137 @@ export default function ProductsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{selectedProduct.name}</h3>
-              <div className="modal-actions">
-                {!showEdit && (
-                  <button className="ghost" onClick={() => setShowEdit(true)}>Editar</button>
-                )}
-                <button className="ghost" onClick={closeProductCard}>✕</button>
-              </div>
+              <button className="ghost" onClick={closeProductCard}>✕</button>
             </div>
             <div className="modal-body">
-              {showEdit && (
-                <form className="edit-form" onSubmit={submitEdit}>
-                  <label>Nombre</label>
-                  <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
-                  <label>Descripción</label>
-                  <input value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-                  <label>Cantidad</label>
-                  <input type="number" min="0" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
-                  <label>Unidad</label>
-                  <select value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
-                    <option value="piezas">Piezas</option>
-                    <option value="metros">Metros</option>
-                    <option value="kilos">Kilos</option>
-                    <option value="litros">Litros</option>
-                    <option value="cajas">Cajas</option>
-                    <option value="paquetes">Paquetes</option>
-                    <option value="unidades">Unidades</option>
+              <div className="product-details">
+                <div className="muted">Descripción: {selectedProduct.description}</div>
+                <div className="muted">Unidad: {selectedProduct.unit}</div>
+                <div className="muted">Cantidad actual: {selectedProduct.quantity} {selectedProduct.unit}</div>
+              </div>
+
+              {/* Filtros historial */}
+              <div className="delivery-filters">
+                <div className="filter-field">
+                  <label>Usuario</label>
+                  <select value={deliveryFilters.userId} onChange={(e) => setDeliveryFilters({ ...deliveryFilters, userId: e.target.value })}>
+                    <option value="">Todos</option>
+                    {users.map((u) => (
+                      <option key={u._id || u.id} value={u._id || u.id}>{u.name}</option>
+                    ))}
                   </select>
-                  <div className="modal-footer">
-                    <button type="button" className="ghost" onClick={() => setShowEdit(false)}>Cancelar</button>
-                    <button type="submit" className="primary">Guardar</button>
-                  </div>
-                </form>
+                </div>
+                <div className="filter-field">
+                  <label>Desde</label>
+                  <input type="date" value={deliveryFilters.from} onChange={(e) => setDeliveryFilters({ ...deliveryFilters, from: e.target.value })} />
+                </div>
+                <div className="filter-field">
+                  <label>Hasta</label>
+                  <input type="date" value={deliveryFilters.to} onChange={(e) => setDeliveryFilters({ ...deliveryFilters, to: e.target.value })} />
+                </div>
+                <div className="filter-actions">
+                  <button className="ghost" onClick={() => setDeliveryFilters({ userId: '', from: '', to: '' })}>Limpiar filtros</button>
+                </div>
+              </div>
+
+              {user?.role === 'admin' && (
+                <div className="deliver-section">
+                  <button className="primary" onClick={() => setShowDeliverModal(true)}>Entregar</button>
+                </div>
               )}
 
-              {!showEdit && (
-                <>
-                  <div className="product-details">
-                    <div className="muted">Descripción: {selectedProduct.description}</div>
-                    <div className="muted">Unidad: {selectedProduct.unit}</div>
-                    <div className="muted">Cantidad actual: {selectedProduct.quantity} {selectedProduct.unit}</div>
-                  </div>
-
-                  {/* Filtros historial */}
-                  <div className="delivery-filters">
-                    <div className="filter-field">
-                      <label>Usuario</label>
-                      <select value={deliveryFilters.userId} onChange={(e) => setDeliveryFilters({ ...deliveryFilters, userId: e.target.value })}>
-                        <option value="">Todos</option>
-                        {users.map((u) => (
-                          <option key={u._id || u.id} value={u._id || u.id}>{u.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="filter-field">
-                      <label>Desde</label>
-                      <input type="date" value={deliveryFilters.from} onChange={(e) => setDeliveryFilters({ ...deliveryFilters, from: e.target.value })} />
-                    </div>
-                    <div className="filter-field">
-                      <label>Hasta</label>
-                      <input type="date" value={deliveryFilters.to} onChange={(e) => setDeliveryFilters({ ...deliveryFilters, to: e.target.value })} />
-                    </div>
-                    <div className="filter-actions">
-                      <button className="ghost" onClick={() => setDeliveryFilters({ userId: '', from: '', to: '' })}>Limpiar filtros</button>
-                    </div>
-                  </div>
-
-                  {user?.role === 'admin' && (
-                    <div className="deliver-section">
-                      <button className="primary" onClick={() => setShowDeliverModal(true)}>Entregar</button>
-                    </div>
-                  )}
-
-                  {user?.role === 'admin' && (
-                    <div className="delivery-history">
-                      <h4>Historial de entregas</h4>
-                      {visibleDeliveries.length === 0 ? (
-                        <div className="muted">Sin entregas registradas para los filtros aplicados.</div>
-                      ) : (
-                        <div className="delivery-table">
-                          <div className="delivery-row delivery-row-header">
-                            <div>Fecha</div>
-                            <div>Hora</div>
-                            <div>Cantidad</div>
-                            <div>Usuario</div>
-                            <div>Entregado por</div>
+              {user?.role === 'admin' && (
+                <div className="delivery-history">
+                  <h4>Historial de entregas</h4>
+                  {visibleDeliveries.length === 0 ? (
+                    <div className="muted">Sin entregas registradas para los filtros aplicados.</div>
+                  ) : (
+                    <div className="delivery-table">
+                      <div className="delivery-row delivery-row-header">
+                        <div>Fecha</div>
+                        <div>Hora</div>
+                        <div>Cantidad</div>
+                        <div>Usuario</div>
+                        <div>Entregado por</div>
+                      </div>
+                      {visibleDeliveries.map((d) => {
+                        const date = new Date(d.deliveredAt || d.createdAt)
+                        const f = date.toLocaleDateString()
+                        const t = date.toLocaleTimeString()
+                        const isIn = (d.type === 'in')
+                        const sign = isIn ? '+' : '-'
+                        const isEditing = editingDeliveryId === d._id
+                        return (
+                          <div key={d._id} className="delivery-row">
+                            <div>{f}</div>
+                            <div>{t}</div>
+                            <div className={`qty ${isIn ? 'qty-in' : 'qty-out'}`}>
+                              {sign}
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={editingDeliveryQty}
+                                  onChange={(e) => setEditingDeliveryQty(e.target.value)}
+                                  style={{ width: 80 }}
+                                />
+                              ) : (
+                                d.quantity
+                              )}
+                            </div>
+                            <div>{d.toUser?.name || d.toUser?.email || (isIn ? '—' : '')}</div>
+                            <div className="delivery-actions">
+                              <div className="muted">{d.deliveredBy?.name || d.deliveredBy?.email}</div>
+                              {user?.role === 'admin' && (
+                                isEditing ? (
+                                  <>
+                                    <button
+                                      className="ghost"
+                                      onClick={async () => {
+                                        try {
+                                          const newQty = Number(editingDeliveryQty)
+                                          if (!newQty || newQty <= 0) return
+                                          await api.put(`/deliveries/${d._id}`, { quantity: newQty })
+                                          setEditingDeliveryId(null)
+                                          setEditingDeliveryQty('')
+                                          // Refrescar detalle y entregas
+                                          await openProductCard(selectedProduct._id || selectedProduct.id)
+                                          await load()
+                                        } catch (err) {
+                                          alert(err?.response?.data?.message || 'Error al actualizar entrega')
+                                        }
+                                      }}
+                                    >Guardar</button>
+                                    <button
+                                      className="ghost"
+                                      onClick={() => {
+                                        setEditingDeliveryId(null)
+                                        setEditingDeliveryQty('')
+                                      }}
+                                    >Cancelar</button>
+                                  </>
+                                ) : (
+                                  <button
+                                    className="ghost"
+                                    onClick={() => {
+                                      setEditingDeliveryId(d._id)
+                                      setEditingDeliveryQty(String(d.quantity))
+                                    }}
+                                  >Editar</button>
+                                )
+                              )}
+                            </div>
                           </div>
-                          {visibleDeliveries.map((d) => {
-                            const date = new Date(d.deliveredAt || d.createdAt)
-                            const f = date.toLocaleDateString()
-                            const t = date.toLocaleTimeString()
-                            const isIn = (d.type === 'in')
-                            const sign = isIn ? '+' : '-'
-                            return (
-                              <div key={d._id} className="delivery-row">
-                                <div>{f}</div>
-                                <div>{t}</div>
-                                <div className={`qty ${isIn ? 'qty-in' : 'qty-out'}`}>{sign}{d.quantity}</div>
-                                <div>{d.toUser?.name || d.toUser?.email || (isIn ? '—' : '')}</div>
-                                <div>{d.deliveredBy?.name || d.deliveredBy?.email}</div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
+                        )
+                      })}
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
-            
+            <div className="modal-footer">
+              <button onClick={closeProductCard}>Cerrar</button>
+            </div>
           </div>
         </div>
       )}
@@ -470,5 +462,8 @@ export default function ProductsPage() {
     </div>
   )
 }
+
+
+
 
 

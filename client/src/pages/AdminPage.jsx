@@ -5,6 +5,8 @@ export default function AdminPage() {
   const { api } = useAuth()
   const [users, setUsers] = useState([])
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user' })
+  const [editingUser, setEditingUser] = useState(null)
+  const [editingForm, setEditingForm] = useState({ name: '', email: '', password: '', role: 'user' })
   const [userErrorDetails, setUserErrorDetails] = useState([])
   const [error, setError] = useState('')
 
@@ -61,23 +63,92 @@ export default function AdminPage() {
       <ul className="list">
         {users.map((u) => (
           <li key={u.id || u._id} className="list-item">
-            <div>
-              <strong>{u.name}</strong>
-              <div className="muted">{u.email}</div>
-            </div>
-            <div className="user-item-actions">
-              <div className="badge user-role-badge">{u.role}</div>
-              {u.isSeedAdmin !== true && (
-                <button
-                  className="ghost"
-                  onClick={async () => {
-                    if (!confirm('¿Eliminar este usuario?')) return
-                    await api.delete(`/users/${u._id || u.id}`)
-                    await load()
-                  }}
-                >Eliminar</button>
-              )}
-            </div>
+            {(editingUser && ((u._id || u.id) === (editingUser._id || editingUser.id))) ? (
+              <>
+                <div>
+                  <input placeholder="Nombre" value={editingForm.name} onChange={(e) => setEditingForm({ ...editingForm, name: e.target.value })} />
+                  <input placeholder="Email" type="email" value={editingForm.email} onChange={(e) => setEditingForm({ ...editingForm, email: e.target.value })} />
+                </div>
+                <div className="user-item-actions">
+                  <select value={editingForm.role} onChange={(e) => setEditingForm({ ...editingForm, role: e.target.value })}>
+                    <option value="user">Usuario</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                  <input placeholder="Nueva contraseña (opcional)" minLength={8} type="password" value={editingForm.password} onChange={(e) => setEditingForm({ ...editingForm, password: e.target.value })} />
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      setEditingUser(null)
+                      setEditingForm({ name: '', email: '', password: '', role: 'user' })
+                      setError('')
+                      setUserErrorDetails([])
+                    }}
+                  >Cancelar</button>
+                  <button
+                    className="ghost"
+                    onClick={async () => {
+                      setError('')
+                      setUserErrorDetails([])
+                      try {
+                        const payload = {
+                          name: editingForm.name.trim(),
+                          email: editingForm.email.trim(),
+                          role: editingForm.role === 'admin' ? 'admin' : 'user'
+                        }
+                        if (editingForm.password && editingForm.password.length >= 8) {
+                          payload.password = editingForm.password
+                        }
+                        console.log(payload, u._id || u.id)
+                        await api.put(`/users/${u._id || u.id}`,(payload))
+                        setEditingUser(null)
+                        setEditingForm({ name: '', email: '', password: '', role: 'user' })
+                        await load()
+                      } catch (err) {
+                        setError(err?.response?.data?.message || 'Error al actualizar usuario')
+                        const details = err?.response?.data?.details
+                        if (Array.isArray(details) && details.length) setUserErrorDetails(details)
+                      }
+                    }}
+                  >Guardar cambios</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <strong>{u.name}</strong>
+                  <div className="muted">{u.email}</div>
+                </div>
+                <div className="user-item-actions">
+                  <div className="badge user-role-badge">{u.role}</div>
+                  {u.isSeedAdmin !== true && (
+                    <button
+                      className="ghost"
+                      onClick={() => {
+                        setEditingUser(u)
+                        setEditingForm({
+                          name: u.name || '',
+                          email: u.email || '',
+                          password: '',
+                          role: u.role === 'admin' ? 'admin' : 'user'
+                        })
+                        setError('')
+                        setUserErrorDetails([])
+                      }}
+                    >Editar</button>
+                  )}
+                  {u.isSeedAdmin !== true && (
+                    <button
+                      className="ghost"
+                      onClick={async () => {
+                        if (!confirm('¿Eliminar este usuario?')) return
+                        await api.delete(`/users/${u._id || u.id}`)
+                        await load()
+                      }}
+                    >Eliminar</button>
+                  )}
+                </div>
+              </>
+            )}
           </li>
         ))}
       </ul>
