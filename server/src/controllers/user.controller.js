@@ -50,4 +50,64 @@ export async function deleteUser(req, res) {
   }
 }
 
+export async function updateUser(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ message: 'Id requerido' });
+
+    const { name, email, role, password } = req.body || {};
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+
+    // Proteger seed admin: solo el seed admin puede modificarlo
+    if (user.isSeedAdmin && !req.user?.isSeedAdmin) {
+      return res.status(403).json({ message: 'No autorizado para modificar este usuario' });
+    }
+
+    // Email
+    if (typeof email === 'string' && email.trim()) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (normalizedEmail !== user.email) {
+        const exists = await User.findOne({ email: normalizedEmail, _id: { $ne: user._id } });
+        if (exists) return res.status(409).json({ message: 'El email ya está registrado' });
+        user.email = normalizedEmail;
+      }
+    }
+
+    // Nombre
+    if (typeof name === 'string' && name.trim()) {
+      user.name = name.trim();
+    }
+
+    // Rol
+    if (typeof role === 'string') {
+      const newRole = role === 'admin' ? 'admin' : 'user';
+      // Evitar degradar seed admin a menos que sea él mismo seed admin operando
+      if (user.isSeedAdmin && newRole !== 'admin' && !req.user?.isSeedAdmin) {
+        return res.status(403).json({ message: 'No autorizado para cambiar el rol del usuario seed' });
+      }
+      user.role = newRole;
+    }
+
+    // Password
+    if (typeof password === 'string' && password.length > 0) {
+      if (password.length < 8) {
+        return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres' });
+      }
+      user.password = password; // será hasheado en pre('save')
+    }
+
+    await user.save();
+    return res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, isSeedAdmin: user.isSeedAdmin } });
+  } catch (error) {
+    if (error?.name === 'ValidationError') {
+      const details = Object.values(error.errors).map((e) => e.message);
+      return res.status(400).json({ message: 'Datos inválidos', details });
+    }
+    console.error('updateUser error:', error);
+    return res.status(500).json({ message: 'Error al actualizar usuario' });
+  }
+}
+
 

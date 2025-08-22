@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 
 export default function ProductsPage() {
   const { api, user } = useAuth()
-  const [form, setForm] = useState({ name: '', description: '', unit: 'piezas', quantity: 0 })
+  const [form, setForm] = useState({ name: '', description: '', unit: 'piezas', quantity: 0, recommendedQuantity: 0 })
   const [products, setProducts] = useState([])
   const [filteredProducts, setFilteredProducts] = useState([])
   const [loading, setLoading] = useState(false)
@@ -13,6 +13,8 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [productDeliveries, setProductDeliveries] = useState([])
+  const [editingDeliveryId, setEditingDeliveryId] = useState(null)
+  const [editingDeliveryQty, setEditingDeliveryQty] = useState('')
   const [showDeliverModal, setShowDeliverModal] = useState(false)
   const [deliverForm, setDeliverForm] = useState({ quantity: '', toUserId: '' })
   const [users, setUsers] = useState([])
@@ -62,8 +64,9 @@ export default function ProductsPage() {
         description: form.description,
         unit: form.unit,
         quantity: Number(form.quantity) || 0,
+        recommendedQuantity: Number(form.recommendedQuantity) || 0,
       })
-      setForm({ name: '', description: '', unit: 'piezas', quantity: 0 })
+      setForm({ name: '', description: '', unit: 'piezas', quantity: 0, recommendedQuantity: 0 })
       setShowForm(false)
       await load()
     } catch (err) {
@@ -112,6 +115,8 @@ export default function ProductsPage() {
     setShowDeliverModal(false)
     setDeliverForm({ quantity: '', toUserId: '' })
     setDeliveryFilters({ userId: '', from: '', to: '' })
+    setEditingDeliveryId(null)
+    setEditingDeliveryQty('')
   }
 
   const submitDelivery = async (e) => {
@@ -230,6 +235,7 @@ export default function ProductsPage() {
           <input placeholder="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input placeholder="Descripción" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <input placeholder="Cantidad" type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} min="0" />
+          <input placeholder="Cantidad recomendada" type="number" value={form.recommendedQuantity} onChange={(e) => setForm({ ...form, recommendedQuantity: e.target.value })} min="0" />
           <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
             <option value="piezas">Piezas</option>
             <option value="metros">Metros</option>
@@ -257,7 +263,12 @@ export default function ProductsPage() {
       <div className="products-grid">
         {currentProducts.map((p) => (
           <div key={p._id || p.id} className="product-card" onClick={() => openProductCard(p)} role="button" tabIndex={0}>
-            <strong>{p.name}</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <strong>{p.name}</strong>
+              {(typeof p.recommendedQuantity === 'number' && typeof p.quantity === 'number' && p.recommendedQuantity > 0 && p.quantity < p.recommendedQuantity) && (
+                <span className="low-stock-indicator" title="Producto escaso"></span>
+              )}
+            </div>
             <div className="muted">{p.description}</div>
             <div className="muted">Unidad: {p.unit}</div>
             <div className="product-actions">
@@ -347,13 +358,67 @@ export default function ProductsPage() {
                         const t = date.toLocaleTimeString()
                         const isIn = (d.type === 'in')
                         const sign = isIn ? '+' : '-'
+                        const isEditing = editingDeliveryId === d._id
                         return (
                           <div key={d._id} className="delivery-row">
                             <div>{f}</div>
                             <div>{t}</div>
-                            <div className={`qty ${isIn ? 'qty-in' : 'qty-out'}`}>{sign}{d.quantity}</div>
+                            <div className={`qty ${isIn ? 'qty-in' : 'qty-out'}`}>
+                              {sign}
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={editingDeliveryQty}
+                                  onChange={(e) => setEditingDeliveryQty(e.target.value)}
+                                  style={{ width: 80 }}
+                                />
+                              ) : (
+                                d.quantity
+                              )}
+                            </div>
                             <div>{d.toUser?.name || d.toUser?.email || (isIn ? '—' : '')}</div>
-                            <div>{d.deliveredBy?.name || d.deliveredBy?.email}</div>
+                            <div className="delivery-actions">
+                              <div className="muted">{d.deliveredBy?.name || d.deliveredBy?.email}</div>
+                              {user?.role === 'admin' && (
+                                isEditing ? (
+                                  <>
+                                    <button
+                                      className="ghost"
+                                      onClick={async () => {
+                                        try {
+                                          const newQty = Number(editingDeliveryQty)
+                                          if (!newQty || newQty <= 0) return
+                                          await api.put(`/deliveries/${d._id}`, { quantity: newQty })
+                                          setEditingDeliveryId(null)
+                                          setEditingDeliveryQty('')
+                                          // Refrescar detalle y entregas
+                                          await openProductCard(selectedProduct._id || selectedProduct.id)
+                                          await load()
+                                        } catch (err) {
+                                          alert(err?.response?.data?.message || 'Error al actualizar entrega')
+                                        }
+                                      }}
+                                    >Guardar</button>
+                                    <button
+                                      className="ghost"
+                                      onClick={() => {
+                                        setEditingDeliveryId(null)
+                                        setEditingDeliveryQty('')
+                                      }}
+                                    >Cancelar</button>
+                                  </>
+                                ) : (
+                                  <button
+                                    className="ghost"
+                                    onClick={() => {
+                                      setEditingDeliveryId(d._id)
+                                      setEditingDeliveryQty(String(d.quantity))
+                                    }}
+                                  >Editar</button>
+                                )
+                              )}
+                            </div>
                           </div>
                         )
                       })}

@@ -9,6 +9,7 @@ import { env } from './config/env.js';
 import { connectDatabase } from './config/db.js';
 import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
+import deliveryRoutes from './routes/delivery.routes.js';
 import userRoutes from './routes/user.routes.js';
 
 const app = express();
@@ -35,6 +36,7 @@ app.use('/api', apiLimiter);
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/users', userRoutes);
 
 app.get('/api/health', (req, res) => {
